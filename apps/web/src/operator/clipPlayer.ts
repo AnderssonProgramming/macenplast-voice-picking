@@ -91,10 +91,20 @@ export class ClipPlayer {
       this.audio = audio
       await audio.play()
       // Wait for the clip to actually finish — the play() promise only
-      // resolves once playback *starts*, not once it ends.
+      // resolves once playback *starts*, not once it ends. Capped: these
+      // clips are a few seconds of speech at most, so if 'ended'/'error'
+      // never fire (e.g. a stalled decode), give up rather than jamming
+      // every phrase queued behind this one for the rest of the shift —
+      // playback did start, so this counts as a successful clip play, not
+      // a cache miss that should also trigger the speechSynthesis fallback.
       await new Promise<void>((resolve) => {
-        audio.addEventListener('ended', () => resolve(), { once: true })
-        audio.addEventListener('error', () => resolve(), { once: true })
+        const timer = setTimeout(resolve, 15_000)
+        const finish = (): void => {
+          clearTimeout(timer)
+          resolve()
+        }
+        audio.addEventListener('ended', finish, { once: true })
+        audio.addEventListener('error', finish, { once: true })
       })
       return true
     } catch {
