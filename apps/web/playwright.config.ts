@@ -9,7 +9,8 @@ const pythonWin = path.join(apiDir, '.venv', 'Scripts', 'python.exe')
 const pythonUnix = path.join(apiDir, '.venv', 'bin', 'python')
 // CI installs macenplast into the runner's system Python (no venv) and
 // sets E2E_API_PYTHON=python; local dev uses whichever venv exists.
-export const apiPython = process.env.E2E_API_PYTHON || (existsSync(pythonWin) ? pythonWin : pythonUnix)
+export const apiPython =
+  process.env.E2E_API_PYTHON || (existsSync(pythonWin) ? pythonWin : pythonUnix)
 
 export default defineConfig({
   testDir: './e2e',
