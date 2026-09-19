@@ -7,7 +7,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-macenplast}
       POSTGRES_DB: ${POSTGRES_DB:-macenplast}
     ports:
-      - "5432:5432"
+      # Host port 5442, not 5432: this machine already runs three native
+      # PostgreSQL Windows services (v16/17/18) bound to 5432, 5433, and
+      # 5434. Only host-side tools (local Alembic/pytest runs) need this
+      # mapping — the `api` container talks to `postgres:5432` over the
+      # Docker network regardless.
+      - "5442:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

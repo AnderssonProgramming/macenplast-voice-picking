@@ -1,0 +1,773 @@
+[
+  {
+    "name": "pending_present_with_location_check",
+    "state": "PENDING",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "PRESENT" },
+    "expected": {
+      "state": "AWAITING_LOCATION",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "INSTRUCTION" }]
+    }
+  },
+  {
+    "name": "pending_present_without_location_check",
+    "state": "PENDING",
+    "context": {
+      "locationCheckEnabled": false,
+      "expectedLocationBarcode": null,
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "PRESENT" },
+    "expected": {
+      "state": "AWAITING_SCAN",
+      "context": {
+        "locationCheckEnabled": false,
+        "expectedLocationBarcode": null,
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "INSTRUCTION" }]
+    }
+  },
+  {
+    "name": "awaiting_location_correct_scan",
+    "state": "AWAITING_LOCATION",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "SCAN", "barcode": "LOC-A1" },
+    "expected": {
+      "state": "AWAITING_SCAN",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "LOCATION_CORRECT" }]
+    }
+  },
+  {
+    "name": "awaiting_location_wrong_scan_first_attempt",
+    "state": "AWAITING_LOCATION",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "SCAN", "barcode": "LOC-WRONG" },
+    "expected": {
+      "state": "BLOCKED",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 1,
+        "blockedOn": "LOCATION",
+        "lastQty": null
+      },
+      "effects": [{ "type": "PLAY_ALERT", "alert": "MISMATCH" }]
+    }
+  },
+  {
+    "name": "blocked_location_wrong_scan_second_attempt",
+    "state": "BLOCKED",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 1,
+      "blockedOn": "LOCATION",
+      "lastQty": null
+    },
+    "event": { "type": "SCAN", "barcode": "LOC-WRONG" },
+    "expected": {
+      "state": "BLOCKED",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 2,
+        "blockedOn": "LOCATION",
+        "lastQty": null
+      },
+      "effects": [{ "type": "PLAY_ALERT", "alert": "MISMATCH" }]
+    }
+  },
+  {
+    "name": "blocked_location_wrong_scan_third_attempt_escalates",
+    "state": "BLOCKED",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 2,
+      "blockedOn": "LOCATION",
+      "lastQty": null
+    },
+    "event": { "type": "SCAN", "barcode": "LOC-WRONG" },
+    "expected": {
+      "state": "NEEDS_OVERRIDE",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 3,
+        "blockedOn": "LOCATION",
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "CALL_SUPERVISOR" }]
+    }
+  },
+  {
+    "name": "blocked_location_correct_scan_recovers",
+    "state": "BLOCKED",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 2,
+      "blockedOn": "LOCATION",
+      "lastQty": null
+    },
+    "event": { "type": "SCAN", "barcode": "LOC-A1" },
+    "expected": {
+      "state": "AWAITING_SCAN",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "LOCATION_CORRECT" }]
+    }
+  },
+  {
+    "name": "awaiting_scan_correct_barcode",
+    "state": "AWAITING_SCAN",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "SCAN", "barcode": "SKU-100" },
+    "expected": {
+      "state": "AWAITING_QTY",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "QTY_PROMPT", "args": { "quantity": 10 } }]
+    }
+  },
+  {
+    "name": "awaiting_scan_wrong_barcode_first_attempt",
+    "state": "AWAITING_SCAN",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "SCAN", "barcode": "SKU-OTHER" },
+    "expected": {
+      "state": "BLOCKED",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 1,
+        "blockedOn": "SKU",
+        "lastQty": null
+      },
+      "effects": [{ "type": "PLAY_ALERT", "alert": "MISMATCH" }]
+    }
+  },
+  {
+    "name": "blocked_sku_wrong_scan_escalates_after_three",
+    "state": "BLOCKED",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 2,
+      "blockedOn": "SKU",
+      "lastQty": null
+    },
+    "event": { "type": "SCAN", "barcode": "SKU-OTHER" },
+    "expected": {
+      "state": "NEEDS_OVERRIDE",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 3,
+        "blockedOn": "SKU",
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "CALL_SUPERVISOR" }]
+    }
+  },
+  {
+    "name": "blocked_sku_correct_scan_recovers",
+    "state": "BLOCKED",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 1,
+      "blockedOn": "SKU",
+      "lastQty": null
+    },
+    "event": { "type": "SCAN", "barcode": "SKU-100" },
+    "expected": {
+      "state": "AWAITING_QTY",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "QTY_PROMPT", "args": { "quantity": 10 } }]
+    }
+  },
+  {
+    "name": "needs_override_resolves_with_supervisor",
+    "state": "NEEDS_OVERRIDE",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 3,
+      "blockedOn": "SKU",
+      "lastQty": null
+    },
+    "event": { "type": "OVERRIDE", "supervisorId": "SUP-9" },
+    "expected": {
+      "state": "AWAITING_QTY",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [
+        { "type": "LOG_OVERRIDE", "supervisorId": "SUP-9" },
+        { "type": "SPEAK", "phrase": "QTY_PROMPT", "args": { "quantity": 10 } }
+      ]
+    }
+  },
+  {
+    "name": "awaiting_qty_exact_match",
+    "state": "AWAITING_QTY",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "QTY", "quantity": 10 },
+    "expected": {
+      "state": "DONE",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "CORRECT" }, { "type": "QUEUE_SYNC" }]
+    }
+  },
+  {
+    "name": "awaiting_qty_short",
+    "state": "AWAITING_QTY",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "QTY", "quantity": 7 },
+    "expected": {
+      "state": "SHORT_PENDING",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": 7
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "ASK_CONFIRM_SHORT", "args": { "quantity": 7 } }]
+    }
+  },
+  {
+    "name": "awaiting_qty_over_first_attempt",
+    "state": "AWAITING_QTY",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "QTY", "quantity": 15 },
+    "expected": {
+      "state": "BLOCKED",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 1,
+        "blockedOn": "QTY",
+        "lastQty": null
+      },
+      "effects": [{ "type": "PLAY_ALERT", "alert": "MISMATCH" }]
+    }
+  },
+  {
+    "name": "blocked_qty_over_escalates_after_three",
+    "state": "BLOCKED",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 2,
+      "blockedOn": "QTY",
+      "lastQty": null
+    },
+    "event": { "type": "QTY", "quantity": 15 },
+    "expected": {
+      "state": "NEEDS_OVERRIDE",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 3,
+        "blockedOn": "QTY",
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "CALL_SUPERVISOR" }]
+    }
+  },
+  {
+    "name": "blocked_qty_matches_resolves_to_done",
+    "state": "BLOCKED",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 1,
+      "blockedOn": "QTY",
+      "lastQty": null
+    },
+    "event": { "type": "QTY", "quantity": 10 },
+    "expected": {
+      "state": "DONE",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "CORRECT" }, { "type": "QUEUE_SYNC" }]
+    }
+  },
+  {
+    "name": "blocked_qty_now_short_resolves_to_short_pending",
+    "state": "BLOCKED",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 1,
+      "blockedOn": "QTY",
+      "lastQty": null
+    },
+    "event": { "type": "QTY", "quantity": 7 },
+    "expected": {
+      "state": "SHORT_PENDING",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": 7
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "ASK_CONFIRM_SHORT", "args": { "quantity": 7 } }]
+    }
+  },
+  {
+    "name": "short_pending_confirmed_creates_incident",
+    "state": "SHORT_PENDING",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": 7
+    },
+    "event": { "type": "EXCEPTION", "reason": "short" },
+    "expected": {
+      "state": "EXCEPTED",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": 7
+      },
+      "effects": [
+        { "type": "LOG_INCIDENT", "reason": "short" },
+        { "type": "ADVANCE_LINE" }
+      ]
+    }
+  },
+  {
+    "name": "short_pending_corrected_to_full_qty",
+    "state": "SHORT_PENDING",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": 7
+    },
+    "event": { "type": "QTY", "quantity": 10 },
+    "expected": {
+      "state": "DONE",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": 7
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "CORRECT" }, { "type": "QUEUE_SYNC" }]
+    }
+  },
+  {
+    "name": "exception_empty_location_from_awaiting_scan",
+    "state": "AWAITING_SCAN",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "EXCEPTION", "reason": "empty_location" },
+    "expected": {
+      "state": "EXCEPTED",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [
+        { "type": "LOG_INCIDENT", "reason": "empty_location" },
+        { "type": "ADVANCE_LINE" }
+      ]
+    }
+  },
+  {
+    "name": "exception_damaged_from_pending",
+    "state": "PENDING",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "EXCEPTION", "reason": "damaged" },
+    "expected": {
+      "state": "EXCEPTED",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [
+        { "type": "LOG_INCIDENT", "reason": "damaged" },
+        { "type": "ADVANCE_LINE" }
+      ]
+    }
+  },
+  {
+    "name": "exception_damaged_from_blocked",
+    "state": "BLOCKED",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 1,
+      "blockedOn": "SKU",
+      "lastQty": null
+    },
+    "event": { "type": "EXCEPTION", "reason": "damaged" },
+    "expected": {
+      "state": "EXCEPTED",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 1,
+        "blockedOn": "SKU",
+        "lastQty": null
+      },
+      "effects": [
+        { "type": "LOG_INCIDENT", "reason": "damaged" },
+        { "type": "ADVANCE_LINE" }
+      ]
+    }
+  },
+  {
+    "name": "repeat_in_awaiting_scan",
+    "state": "AWAITING_SCAN",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "REPEAT" },
+    "expected": {
+      "state": "AWAITING_SCAN",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "INSTRUCTION" }]
+    }
+  },
+  {
+    "name": "repeat_in_awaiting_qty",
+    "state": "AWAITING_QTY",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": null
+    },
+    "event": { "type": "REPEAT" },
+    "expected": {
+      "state": "AWAITING_QTY",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "QTY_PROMPT", "args": { "quantity": 10 } }]
+    }
+  },
+  {
+    "name": "repeat_in_blocked",
+    "state": "BLOCKED",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 1,
+      "blockedOn": "LOCATION",
+      "lastQty": null
+    },
+    "event": { "type": "REPEAT" },
+    "expected": {
+      "state": "BLOCKED",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 1,
+        "blockedOn": "LOCATION",
+        "lastQty": null
+      },
+      "effects": [{ "type": "PLAY_ALERT", "alert": "MISMATCH" }]
+    }
+  },
+  {
+    "name": "repeat_in_needs_override",
+    "state": "NEEDS_OVERRIDE",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 3,
+      "blockedOn": "SKU",
+      "lastQty": null
+    },
+    "event": { "type": "REPEAT" },
+    "expected": {
+      "state": "NEEDS_OVERRIDE",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 3,
+        "blockedOn": "SKU",
+        "lastQty": null
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "CALL_SUPERVISOR" }]
+    }
+  },
+  {
+    "name": "repeat_in_short_pending",
+    "state": "SHORT_PENDING",
+    "context": {
+      "locationCheckEnabled": true,
+      "expectedLocationBarcode": "LOC-A1",
+      "expectedSkuBarcode": "SKU-100",
+      "expectedQty": 10,
+      "attempts": 0,
+      "blockedOn": null,
+      "lastQty": 7
+    },
+    "event": { "type": "REPEAT" },
+    "expected": {
+      "state": "SHORT_PENDING",
+      "context": {
+        "locationCheckEnabled": true,
+        "expectedLocationBarcode": "LOC-A1",
+        "expectedSkuBarcode": "SKU-100",
+        "expectedQty": 10,
+        "attempts": 0,
+        "blockedOn": null,
+        "lastQty": 7
+      },
+      "effects": [{ "type": "SPEAK", "phrase": "ASK_CONFIRM_SHORT", "args": { "quantity": 7 } }]
+    }
+  }
+]

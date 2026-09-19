@@ -17,7 +17,11 @@ class Settings(BaseSettings):
     app_name: str = "macenplast-voice-picking"
     environment: str = "development"
 
-    database_url: str = "postgresql+psycopg://macenplast:macenplast@localhost:5432/macenplast"
+    # Port 5442: host-side default, matching docker-compose.yml's mapping
+    # (5432-5434 are taken by native Postgres installs on this machine;
+    # inside Docker, the api container reaches Postgres at postgres:5432
+    # instead, via the DATABASE_URL env var set in docker-compose.yml).
+    database_url: str = "postgresql+psycopg://macenplast:macenplast@localhost:5442/macenplast"
 
     elevenlabs_api_key: str = ""
     voice_clip_dir: str = "./voice_clips"

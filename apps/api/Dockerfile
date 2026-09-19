@@ -8,11 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml ./
 COPY src ./src
+COPY alembic ./alembic
+COPY alembic.ini ./
 
 RUN pip install --no-cache-dir .
 
-# alembic/ and alembic.ini are added in Phase 1; COPY them here once they exist.
-
 EXPOSE 8000
 
-CMD ["uvicorn", "macenplast.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn macenplast.main:app --host 0.0.0.0 --port 8000"]
