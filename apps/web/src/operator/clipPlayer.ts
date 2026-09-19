@@ -22,6 +22,12 @@ const SILENT_WAV =
 export class ClipPlayer {
   private textToUrl = new Map<string, string>()
   private audio: HTMLAudioElement | null = null
+  // Serializes speak() calls: without this, two phrases triggered close
+  // together (a fast operator scanning ahead of a clip finishing) would
+  // both grab `this.audio`, and the second's pause() aborts the first's
+  // in-flight play() — which then falls back to speechSynthesis on top of
+  // the real clip, so the operator hears both, overlapping and cut off.
+  private queue: Promise<void> = Promise.resolve()
 
   registerManifest(clips: Array<{ url: string; text: string }>): void {
     for (const clip of clips) {
@@ -54,35 +60,60 @@ export class ClipPlayer {
     })
   }
 
-  async speak(text: string): Promise<void> {
+  /** Queues this phrase behind any still-playing one — see the `queue`
+   * field docstring for why this can't just play immediately. */
+  speak(text: string): Promise<void> {
+    // A swallowed error here must not reject `this.queue` itself — that
+    // would permanently skip every phrase queued after it for the rest of
+    // the shift, since .then() on a rejected promise never runs.
+    this.queue = this.queue.then(() => this.speakNow(text).catch(() => {}))
+    return this.queue
+  }
+
+  private async speakNow(text: string): Promise<void> {
     const url = this.textToUrl.get(text)
     const playedFromCache = url ? await this.playFromCache(url) : false
     if (!playedFromCache) {
-      this.speakWithSpeechSynthesis(text)
+      await this.speakWithSpeechSynthesis(text)
     }
   }
 
   private async playFromCache(url: string): Promise<boolean> {
     if (typeof caches === 'undefined') return false
+    let objectUrl: string | null = null
     try {
       const cache = await caches.open(CACHE_NAME)
       const response = await cache.match(url)
       if (!response) return false
       const blob = await response.blob()
-      const objectUrl = URL.createObjectURL(blob)
-      this.audio?.pause()
-      this.audio = new Audio(objectUrl)
-      await this.audio.play()
+      objectUrl = URL.createObjectURL(blob)
+      const audio = new Audio(objectUrl)
+      this.audio = audio
+      await audio.play()
+      // Wait for the clip to actually finish — the play() promise only
+      // resolves once playback *starts*, not once it ends.
+      await new Promise<void>((resolve) => {
+        audio.addEventListener('ended', () => resolve(), { once: true })
+        audio.addEventListener('error', () => resolve(), { once: true })
+      })
       return true
     } catch {
       return false
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }
 
-  private speakWithSpeechSynthesis(text: string): void {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'es-CO'
-    window.speechSynthesis.speak(utterance)
+  private speakWithSpeechSynthesis(text: string): Promise<void> {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return Promise.resolve()
+    }
+    return new Promise((resolve) => {
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = 'es-CO'
+      utterance.onend = () => resolve()
+      utterance.onerror = () => resolve()
+      window.speechSynthesis.speak(utterance)
+    })
   }
 }
