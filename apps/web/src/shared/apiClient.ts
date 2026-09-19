@@ -99,10 +99,26 @@ export function submitEventBatch(
   return request('/events/batch', { method: 'POST', token, body: { events } })
 }
 
-export function getVoiceManifest(token: string, orderId: string): Promise<VoiceManifestResponse> {
-  return request(`/voice/orders/${orderId}/manifest`, { token })
-}
-
 export function clipAudioUrl(contentHash: string): string {
   return `${BASE_URL}/voice/clips/${contentHash}`
+}
+
+export async function getVoiceManifest(
+  token: string,
+  orderId: string,
+): Promise<VoiceManifestResponse> {
+  const manifest = await request<VoiceManifestResponse>(`/voice/orders/${orderId}/manifest`, {
+    token,
+  })
+  // The backend's `url` field is a path relative to *its own* root
+  // (`/voice/clips/{hash}`), not to whatever the frontend is deployed
+  // behind (e.g. Vercel Services routes only `/api/*` to the backend —
+  // fetching the bare path resolves against the frontend's own origin
+  // instead, silently hitting its SPA catch-all). Route every clip
+  // through `clipAudioUrl()` so it resolves against BASE_URL like every
+  // other API call here does.
+  return {
+    ...manifest,
+    clips: manifest.clips.map((clip) => ({ ...clip, url: clipAudioUrl(clip.content_hash) })),
+  }
 }
