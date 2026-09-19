@@ -31,6 +31,17 @@ class Settings(BaseSettings):
 
     routing_strategy: str = "serpentine"
 
+    # INSECURE placeholder — every deployment outside local dev MUST
+    # override this via the SECRET_KEY env var. Signs operator auth tokens
+    # (see macenplast.security).
+    secret_key: str = "dev-only-insecure-secret-change-me"
+    access_token_ttl_minutes: int = 480  # one shift
+
+    # Global toggle for the plan's location-label-scan addition (section 1).
+    # Per-order/per-line configurability is a plausible future need but
+    # isn't modeled yet — flag if the pilot wants it sooner.
+    location_check_enabled: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

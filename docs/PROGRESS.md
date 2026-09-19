@@ -246,3 +246,86 @@ questions for the next phase.
 
 - None yet — proceeding to Phase 4 (backend API: auth, sessions, orders,
   events, incidents, override, SSE) as planned.
+
+## Phase 4 — Backend API (2026-09-18)
+
+**Built**
+
+- `apps/api/src/macenplast/security.py`: PIN hashing (sha256 placeholder,
+  same as Phase 1's seed script — now shared, not duplicated) and JWT
+  access tokens (`create_access_token`/`decode_access_token`), signed with
+  `Settings.secret_key` (an intentionally-insecure default that every
+  non-dev deployment must override — a Phase 9 hardening item).
+- `apps/api/src/macenplast/api/deps.py`: `get_current_operator` and
+  `require_role(...)` (role-based access — an addition beyond the source
+  document, per section 1 — plus `require_supervisor`, a predefined
+  dependency singleton).
+- Routers, wired into `main.py`: `auth` (PIN login), `sessions`
+  (start/end), `orders` (`assign` — computes the route via Phase 2's
+  `plan_route` and reserves stock via `MockWmsAdapter`; `next-line` —
+  drives the `PRESENT` transition and renders the instruction), `events`
+  (`POST /events` and `/events/batch` — the core: loads a line's state,
+  calls `pick_machine.transition`, persists the result, executes effects
+  against the WMS/incidents, records an append-only `PickEvent`, publishes
+  to the SSE broadcaster; idempotent on `client_event_id`), `incidents`
+  (list/resolve), `reports` (minimal per-session summary — see scope note
+  below), and `sse` (`GET /dashboard/stream`).
+- `apps/api/src/macenplast/domain/pick_machine_json.py`: JSON
+  (de)serialization for pick machine types, factored out of
+  `test_pick_machine_vectors.py` so the API layer and the tests share one
+  conversion instead of duplicating it.
+- `apps/api/scripts/export_openapi.py` + committed `apps/api/openapi.json`
+  + a CI step (`--check`) that fails the build if it's stale — what Phase
+  5 codegens a client against.
+- Integration tests: `test_api_full_flow.py` drives a full order through
+  the real API — login, start session, assign (reserve stock), next-line,
+  three wrong location scans (BLOCKED, BLOCKED, escalate to
+  NEEDS_OVERRIDE), a rejected self-override, a supervisor override, a
+  qty confirmation to DONE, and a check that stock was committed exactly
+  once even after replaying the same `client_event_id`. `test_api_sse.py`
+  covers the SSE stream (see deviation below). `test_api_voice.py` from
+  Phase 3 needed no changes.
+
+**Deviations from the plan**
+
+- **`GET /dashboard/stream` cannot be tested with `TestClient` or
+  `httpx.AsyncClient(transport=ASGITransport(...))` at all** — both fully
+  buffer the ASGI response body before returning anything, so a stream
+  that (by design) never terminates on its own just hangs forever. This
+  is a documented `httpx`/`ASGITransport` limitation, unrelated to
+  `sse-starlette` or this app (confirmed by reproducing it in isolation
+  before concluding it wasn't a code bug). `test_api_sse.py` instead
+  spins up a real Uvicorn server on a background thread and talks to it
+  over an actual socket, which streams incrementally like any real HTTP
+  server. That also sidesteps a second, related hazard:
+  `Broadcaster.publish()`'s `asyncio.Queue.put_nowait()` isn't safe to
+  call across threads/event loops — the test triggers it by making a real
+  `/events` request (so the publish call runs on the live server's own
+  event loop, same as in production), not by calling `broadcaster.publish`
+  directly from the test.
+- `macenplast.api.reports` is intentionally minimal (lines completed,
+  mismatch count, incident count per session) — full KPI reporting
+  (lines/hour, BASELINE vs. VOICE comparison, idle time) is explicitly
+  Phase 6's job per `PLAN.md`, and Phase 6 is outside this build's chosen
+  MVP scope (Phases 0-5).
+- `Location.aisle`/`bay`/`level` values are spoken via templated
+  formatting, not stored as a general n-ary location tree — a location
+  "aisle" is treated as a letter spoken literally and "bay"/"level" as
+  numbers rendered through `numbers_es`. This matches the seeded schema
+  and is easy to extend if a real warehouse's location codes need
+  different handling.
+- Fixed a latent fragility in `db/seed.py`'s `seed_orders`: it previously
+  derived a pick line's location from
+  `(order_num * LINES_PER_ORDER + line_num) % len(locations)`, independent
+  of the index `seed_stock()` used to decide *which* location actually
+  holds that SKU's stock. For the current seed parameters (3 orders x 5
+  lines, well under both list lengths) the two formulas happened to agree,
+  but that was incidental. Fixed to derive the location from the same SKU
+  index `seed_stock()` uses, so a pick line's location is guaranteed to be
+  where its SKU's stock actually is, regardless of future `SKU_COUNT`/
+  `ORDER_COUNT` changes.
+
+**Open questions for Phase 5**
+
+- None yet — proceeding to Phase 5 (operator PWA: core voice-picking flow)
+  as planned.

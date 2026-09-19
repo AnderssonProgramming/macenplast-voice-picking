@@ -1,4 +1,4 @@
-.PHONY: up down logs test lint typecheck seed e2e format
+.PHONY: up down logs test lint typecheck seed e2e format openapi
 
 up:
 	docker compose up --build -d
@@ -23,6 +23,9 @@ format:
 
 seed:
 	cd apps/api && python -m macenplast.db.seed
+
+openapi:
+	cd apps/api && python scripts/export_openapi.py
 
 e2e:
 	cd apps/web && npx playwright test

@@ -8,7 +8,6 @@ its natural unique key before being created. Run with:
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -27,6 +26,7 @@ from macenplast.db.models import (
 )
 from macenplast.db.session import SessionLocal, engine
 from macenplast.domain.pick_machine import PickState
+from macenplast.security import hash_pin
 
 AISLES = ["A", "B", "C"]
 BAYS = ["1", "2", "3", "4"]
@@ -34,15 +34,6 @@ LEVELS = ["1", "2"]
 SKU_COUNT = 30
 ORDER_COUNT = 3
 LINES_PER_ORDER = 5
-
-
-def _hash_pin(pin: str) -> str:
-    """Placeholder PIN hashing for seed data only.
-
-    Phase 4 (operator auth) replaces this with a real password hash
-    (e.g. argon2); this just avoids storing seed PINs as plain text.
-    """
-    return hashlib.sha256(pin.encode("utf-8")).hexdigest()
 
 
 def get_or_create[ModelT](
@@ -117,7 +108,7 @@ def seed_operators_and_devices(session: Session) -> None:
         badge_code="0001",
         defaults={
             "full_name": "Operador Demo",
-            "pin_hash": _hash_pin("1234"),
+            "pin_hash": hash_pin("1234"),
             "role": OperatorRole.OPERATOR,
         },
     )
@@ -127,7 +118,7 @@ def seed_operators_and_devices(session: Session) -> None:
         badge_code="9001",
         defaults={
             "full_name": "Supervisor Demo",
-            "pin_hash": _hash_pin("9999"),
+            "pin_hash": hash_pin("9999"),
             "role": OperatorRole.SUPERVISOR,
         },
     )
@@ -152,8 +143,14 @@ def seed_orders(session: Session, skus: list[Sku], locations: list[Location]) ->
         if existing_lines > 0:
             continue
         for line_num in range(LINES_PER_ORDER):
-            sku = skus[(order_num * LINES_PER_ORDER + line_num) % len(skus)]
-            location = locations[(order_num * LINES_PER_ORDER + line_num) % len(locations)]
+            sku_index = (order_num * LINES_PER_ORDER + line_num) % len(skus)
+            sku = skus[sku_index]
+            # Same index formula seed_stock() uses for this sku's location,
+            # so every pick line points at a location that actually holds
+            # stock of its SKU — not just two independently-wrapping ranges
+            # that happen to agree while ORDER_COUNT * LINES_PER_ORDER stays
+            # smaller than len(skus) and len(locations).
+            location = locations[sku_index % len(locations)]
             session.add(
                 PickLine(
                     order_id=order.id,
