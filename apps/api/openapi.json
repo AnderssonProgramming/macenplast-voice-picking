@@ -1565,7 +1565,7 @@
     },
     "/voice/clips/{content_hash}": {
       "get": {
-        "description": "Serve a cached clip's audio file by its content hash.",
+        "description": "Serve a cached clip's audio bytes by its content hash.",
         "operationId": "get_clip_audio_voice_clips__content_hash__get",
         "parameters": [
           {
