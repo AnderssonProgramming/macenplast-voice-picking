@@ -15,7 +15,17 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import Boolean, Enum, Float, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -247,7 +257,14 @@ class Incident(TimestampedBase):
 
 
 class VoiceClip(TimestampedBase):
-    """A synthesized audio clip, cached by content hash (Phase 3)."""
+    """A synthesized audio clip, cached by content hash (Phase 3).
+
+    Audio bytes live in the row itself (`audio_data`), not on local disk:
+    the deployed target (Vercel Functions) has no persistent filesystem
+    between invocations, so a `file_path` written by one instance would be
+    invisible to the next. Clips are small (a few KB of speech each), so
+    Postgres storage is the simpler choice over adding a blob store.
+    """
 
     __tablename__ = "voice_clips"
 
@@ -256,7 +273,7 @@ class VoiceClip(TimestampedBase):
     voice_id: Mapped[str] = mapped_column(String(64))
     model_id: Mapped[str] = mapped_column(String(64))
     audio_format: Mapped[str] = mapped_column(String(16), default="mp3")
-    file_path: Mapped[str] = mapped_column(String(500))
+    audio_data: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class Survey(TimestampedBase):

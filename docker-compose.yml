@@ -29,11 +29,8 @@ services:
       ENVIRONMENT: development
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-macenplast}:${POSTGRES_PASSWORD:-macenplast}@postgres:5432/${POSTGRES_DB:-macenplast}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
-      VOICE_CLIP_DIR: /voice_clips
     ports:
       - "8000:8000"
-    volumes:
-      - voice_clips:/voice_clips
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,5 +51,4 @@ services:
 
 volumes:
   postgres_data:
-  voice_clips:
   web_node_modules:

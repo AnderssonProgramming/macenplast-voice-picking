@@ -4,14 +4,12 @@ reachable Postgres for the DB row (skips otherwise, see test_seed.py)."""
 from __future__ import annotations
 
 from collections.abc import Iterator
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from macenplast.config import get_settings
 from macenplast.db.base import Base
 from macenplast.db.session import SessionLocal, engine
 from macenplast.voice.clip_cache import content_hash, get_or_synthesize
@@ -34,14 +32,6 @@ def db() -> Iterator[Session]:
         session.close()
 
 
-@pytest.fixture
-def clip_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    monkeypatch.setenv("VOICE_CLIP_DIR", str(tmp_path))
-    get_settings.cache_clear()
-    yield tmp_path
-    get_settings.cache_clear()
-
-
 def test_content_hash_differs_by_voice_and_format() -> None:
     a = content_hash("Correcto.", "voice-1", "eleven_flash_v2_5", "mp3_44100_128")
     b = content_hash("Correcto.", "voice-2", "eleven_flash_v2_5", "mp3_44100_128")
@@ -50,23 +40,19 @@ def test_content_hash_differs_by_voice_and_format() -> None:
 
 
 @patch("macenplast.voice.clip_cache.synthesize")
-def test_first_request_synthesizes_and_writes_file(
-    mock_synthesize: MagicMock, db: Session, clip_dir: Path
+def test_first_request_synthesizes_and_stores_audio(
+    mock_synthesize: MagicMock, db: Session
 ) -> None:
     mock_synthesize.return_value = b"fake-audio-bytes"
 
     clip = get_or_synthesize(db, "Correcto.", voice_id="voice-1")
 
     mock_synthesize.assert_called_once()
-    assert Path(clip.file_path).exists()
-    assert Path(clip.file_path).read_bytes() == b"fake-audio-bytes"
-    assert Path(clip.file_path).is_relative_to(clip_dir)
+    assert clip.audio_data == b"fake-audio-bytes"
 
 
 @patch("macenplast.voice.clip_cache.synthesize")
-def test_second_request_is_a_cache_hit(
-    mock_synthesize: MagicMock, db: Session, clip_dir: Path
-) -> None:
+def test_second_request_is_a_cache_hit(mock_synthesize: MagicMock, db: Session) -> None:
     mock_synthesize.return_value = b"fake-audio-bytes"
 
     first = get_or_synthesize(db, "Correcto.", voice_id="voice-1")
@@ -78,9 +64,7 @@ def test_second_request_is_a_cache_hit(
 
 
 @patch("macenplast.voice.clip_cache.synthesize")
-def test_different_text_is_a_different_clip(
-    mock_synthesize: MagicMock, db: Session, clip_dir: Path
-) -> None:
+def test_different_text_is_a_different_clip(mock_synthesize: MagicMock, db: Session) -> None:
     mock_synthesize.return_value = b"fake-audio-bytes"
 
     first = get_or_synthesize(db, "Correcto.", voice_id="voice-1")

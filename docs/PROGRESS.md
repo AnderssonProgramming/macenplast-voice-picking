@@ -198,8 +198,9 @@ questions for the next phase.
   the real-API smoke test, marked `@pytest.mark.live` and skipped by
   default.
 - `apps/api/src/macenplast/voice/clip_cache.py`: `get_or_synthesize()` —
-  content-hash-keyed cache (`voice_clips` DB row + file under
-  `VOICE_CLIP_DIR`). Hash covers `(text, voice_id, model_id,
+  content-hash-keyed cache (`voice_clips` DB row, audio bytes stored in
+  the row itself — no local disk, so this also works on Vercel's
+  ephemeral filesystem). Hash covers `(text, voice_id, model_id,
   output_format)`.
 - `tools/voice-clips/build_static_clips.py`: builds numbers 0-999, the 4
   fixed phrases, every SKU's `voice_alias`, and INSTRUCTION/QTY_PROMPT for

@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,9 +28,22 @@ class Settings(BaseSettings):
     # ElevenLabs' public "Rachel" voice — a placeholder until Macenplast
     # picks/clones a real voice. Override via ELEVENLABS_VOICE_ID.
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
-    voice_clip_dir: str = "./voice_clips"
 
     routing_strategy: str = "serpentine"
+
+    @field_validator("database_url")
+    @classmethod
+    def _use_psycopg_dialect(cls, value: str) -> str:
+        """Normalize a plain `postgres://`/`postgresql://` URL (what every
+        managed Postgres provider — Neon, Supabase, Heroku-style — hands
+        out) to the `postgresql+psycopg://` SQLAlchemy dialect string this
+        app's models/session actually need. Leaves already-qualified URLs
+        (or any other scheme) untouched."""
+        if value.startswith("postgres://"):
+            return "postgresql+psycopg://" + value[len("postgres://") :]
+        if value.startswith("postgresql://"):
+            return "postgresql+psycopg://" + value[len("postgresql://") :]
+        return value
 
     # INSECURE placeholder — every deployment outside local dev MUST
     # override this via the SECRET_KEY env var. Signs operator auth tokens

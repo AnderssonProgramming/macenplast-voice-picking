@@ -10,8 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from macenplast.api.schemas.voice import ClipDescriptor, VoiceManifestResponse
@@ -50,12 +49,12 @@ def _to_descriptor(clip: VoiceClip) -> ClipDescriptor:
 
 
 @router.get("/clips/{content_hash}")
-def get_clip_audio(content_hash: str, db: Session = Depends(get_db)) -> FileResponse:
-    """Serve a cached clip's audio file by its content hash."""
+def get_clip_audio(content_hash: str, db: Session = Depends(get_db)) -> Response:
+    """Serve a cached clip's audio bytes by its content hash."""
     clip = db.query(VoiceClip).filter_by(content_hash=content_hash).one_or_none()
     if clip is None:
         raise HTTPException(status_code=404, detail="Clip not found")
-    return FileResponse(clip.file_path, media_type=_content_type_for(clip.audio_format))
+    return Response(content=clip.audio_data, media_type=_content_type_for(clip.audio_format))
 
 
 @router.get("/skus/{sku_id}/clip")

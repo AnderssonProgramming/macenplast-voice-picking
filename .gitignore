@@ -41,3 +41,6 @@ apps/web/e2e/.e2e-fixture.json
 
 # Alembic local db
 *.sqlite3
+
+.vercel
+.env*
