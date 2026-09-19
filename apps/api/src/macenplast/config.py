@@ -25,9 +25,14 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://macenplast:macenplast@localhost:5442/macenplast"
 
     elevenlabs_api_key: str = ""
-    # ElevenLabs' public "Rachel" voice — a placeholder until Macenplast
-    # picks/clones a real voice. Override via ELEVENLABS_VOICE_ID.
-    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+    # ElevenLabs' premade "Bella" voice — a placeholder until Macenplast
+    # picks/clones a real voice. NOT "Rachel" (21m00Tcm4TlvDq8ikWAM): as of
+    # this writing ElevenLabs gates that specific library voice behind a
+    # paid plan ("Free users cannot use library voices via the API", HTTP
+    # 402), confirmed against a free-tier account — see ADR 0004. Bella is
+    # also a premade/library voice but isn't plan-gated. Override via
+    # ELEVENLABS_VOICE_ID.
+    elevenlabs_voice_id: str = "hpp4J3VqNfWAUOO0d1Us"
 
     routing_strategy: str = "serpentine"
 

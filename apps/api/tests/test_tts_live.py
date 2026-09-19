@@ -19,7 +19,7 @@ def test_synthesize_returns_real_audio_bytes() -> None:
     if not get_settings().elevenlabs_api_key:
         pytest.skip("ELEVENLABS_API_KEY not set")
 
-    audio = synthesize("Correcto.", voice_id="21m00Tcm4TlvDq8ikWAM")
+    audio = synthesize("Correcto.", voice_id=get_settings().elevenlabs_voice_id)
 
     assert isinstance(audio, bytes)
     assert len(audio) > 0
