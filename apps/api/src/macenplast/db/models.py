@@ -109,7 +109,13 @@ class SkuBarcode(TimestampedBase):
 
 
 class StockLevel(TimestampedBase):
-    """On-hand quantity of a SKU at a location."""
+    """On-hand and reserved quantity of a SKU at a location.
+
+    `quantity` is physical on-hand stock; `reserved_qty` is stock already
+    allocated to an in-progress pick line but not yet committed. Available
+    stock for new reservations is `quantity - reserved_qty` (see
+    `macenplast.ports.wms_port.WmsPort.get_stock`).
+    """
 
     __tablename__ = "stock_levels"
     __table_args__ = (UniqueConstraint("sku_id", "location_id", name="uq_stock_sku_location"),)
@@ -117,6 +123,37 @@ class StockLevel(TimestampedBase):
     sku_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("skus.id"))
     location_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("locations.id"))
     quantity: Mapped[int] = mapped_column(Integer, default=0)
+    reserved_qty: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class MovementType(StrEnum):
+    """What a `StockMovement` ledger row represents."""
+
+    RESERVE = "RESERVE"
+    COMMIT = "COMMIT"
+    RELEASE = "RELEASE"
+
+
+class StockMovement(TimestampedBase):
+    """Append-only ledger of WMS operations, keyed for idempotency.
+
+    `(movement_type, idempotency_key)` is unique: replaying the same
+    reserve/commit/release call twice (e.g. a retried offline sync) is a
+    no-op the second time. See `macenplast.adapters.mock_wms`.
+    """
+
+    __tablename__ = "stock_movements"
+    __table_args__ = (
+        UniqueConstraint("movement_type", "idempotency_key", name="uq_movement_idempotency"),
+    )
+
+    sku_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("skus.id"))
+    location_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("locations.id"))
+    movement_type: Mapped[MovementType] = mapped_column(
+        Enum(MovementType, native_enum=False, length=20)
+    )
+    quantity: Mapped[int] = mapped_column(Integer)
+    idempotency_key: Mapped[str] = mapped_column(String(128), index=True)
 
 
 class PickSession(TimestampedBase):
@@ -236,6 +273,7 @@ __all__ = [
     "Device",
     "Incident",
     "Location",
+    "MovementType",
     "Operator",
     "OperatorRole",
     "OrderStatus",
@@ -247,6 +285,7 @@ __all__ = [
     "Sku",
     "SkuBarcode",
     "StockLevel",
+    "StockMovement",
     "Survey",
     "VoiceClip",
 ]

@@ -119,3 +119,53 @@ questions for the next phase.
   (e.g. a `stock_movements` table) for `MockWmsAdapter.commit_pick` — not
   part of section 6's table list, so it's introduced there rather than
   here.
+
+## Phase 2 — WMS port and route planning (2026-09-18)
+
+**Built**
+
+- `apps/api/src/macenplast/ports/wms_port.py`: the `WmsPort` ABC
+  (`get_stock`, `reserve`, `commit_pick`, `release`) plus
+  `InsufficientStockError`.
+- `apps/api/src/macenplast/adapters/mock_wms.py`: Postgres-backed
+  `MockWmsAdapter`. Added a `stock_movements` ledger table and a
+  `reserved_qty` column on `stock_levels` (migration
+  `a563f76c6c7e_wms_stock_movements_ledger.py`) — `reserve`/`commit_pick`/
+  `release` are idempotent per `(movement_type, idempotency_key)`, backed
+  by a real unique constraint, not just an in-app check.
+- `apps/api/src/macenplast/adapters/rest_wms.py`: `RestWmsAdapter` stub —
+  every method raises `NotImplementedError` with a docstring listing what
+  Macenplast needs to confirm (base URL, auth, endpoint shapes,
+  idempotency handling) before it can be implemented for real.
+- `apps/api/src/macenplast/domain/routing.py`: pure `plan_route()` —
+  default serpentine (S-shape) heuristic with a documented tie-break
+  (level, then id), and an optional `or_tools` strategy (exact/near-exact
+  TSP via Google OR-Tools) behind the optional `routing` extra
+  (`pip install ".[routing]"`); raises a clear `RuntimeError` if selected
+  without the dependency installed.
+- Tests: `test_mock_wms.py` (idempotent reserve/commit/release,
+  insufficient-stock errors, available-vs-on-hand distinction),
+  `test_rest_wms.py` (every method raises), `test_routing.py`
+  (single-aisle, multi-aisle zigzag, tie-break, unknown-strategy error,
+  or-tools path skipped when the extra isn't installed, and a
+  deterministic test of the "dependency missing" error message via
+  `monkeypatch` on `__import__` rather than requiring an uninstalled
+  package).
+
+**Deviations from the plan**
+
+- `ortools` is an optional extra (`routing`), not a base dependency —
+  `PLAN.md` section 3 calls the OR-Tools mode "optional... for larger
+  orders," so it isn't installed by default; CI and local dev run without
+  it, and `test_or_tools_strategy_visits_every_location` is skipped
+  (`pytest.importorskip`) rather than failing when it's absent.
+- `WmsPort.reserve`/`release` (not just `commit_pick`) required adding
+  `reserved_qty` to `stock_levels` — section 6 didn't list it, but the
+  reserve/commit split described by the port's method names
+  (`PLAN.md` section 3) needs somewhere to track "allocated but not yet
+  picked" stock separately from on-hand.
+
+**Open questions for Phase 3**
+
+- None yet — proceeding to Phase 3 (voice service and clip pipeline) as
+  planned.
