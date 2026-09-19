@@ -37,6 +37,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+apps/web/e2e/.e2e-fixture.json
 
 # Alembic local db
 *.sqlite3

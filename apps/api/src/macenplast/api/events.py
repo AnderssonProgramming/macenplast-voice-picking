@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from macenplast.adapters.mock_wms import MockWmsAdapter
@@ -147,7 +148,21 @@ def apply_event(db: Session, operator: Operator, request: SubmitEventRequest) ->
             occurred_at=request.occurred_at,
         )
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Two concurrent requests replaying the same client_event_id (two
+        # sync attempts overlapping, a retried batch) both pass the
+        # check above before either commits — the unique constraint on
+        # client_event_id is the real guard. Whichever loses the race
+        # just returns the winner's already-committed result.
+        db.rollback()
+        existing = (
+            db.query(PickEvent).filter_by(client_event_id=request.client_event_id).one_or_none()
+        )
+        if existing is None:
+            raise
+        return EventResult(**existing.payload["result"])
 
     broadcaster.publish(
         {

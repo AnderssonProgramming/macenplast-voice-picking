@@ -30,26 +30,10 @@ from collections.abc import Iterator
 import httpx
 import pytest
 import uvicorn
-from sqlalchemy.exc import OperationalError
 
-from macenplast.db import seed
-from macenplast.db.base import Base
 from macenplast.db.models import Device, PickLine, PickOrder
-from macenplast.db.session import SessionLocal, engine
+from macenplast.db.session import SessionLocal
 from macenplast.main import app
-
-
-@pytest.fixture
-def seeded_db() -> Iterator[None]:
-    try:
-        with engine.connect():
-            pass
-    except OperationalError:
-        pytest.skip("Postgres not reachable; start it with `docker compose up -d postgres`")
-
-    Base.metadata.create_all(bind=engine)
-    seed.main()
-    yield
 
 
 @pytest.fixture

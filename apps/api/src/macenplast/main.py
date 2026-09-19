@@ -1,8 +1,10 @@
 """FastAPI application entry point."""
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from macenplast.api.auth import router as auth_router
+from macenplast.api.devices import router as devices_router
 from macenplast.api.events import router as events_router
 from macenplast.api.health import router as health_router
 from macenplast.api.incidents import router as incidents_router
@@ -15,8 +17,17 @@ from macenplast.config import get_settings
 
 app = FastAPI(title=get_settings().app_name)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_allow_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(devices_router)
 app.include_router(sessions_router)
 app.include_router(orders_router)
 app.include_router(events_router)

@@ -329,3 +329,131 @@ questions for the next phase.
 
 - None yet — proceeding to Phase 5 (operator PWA: core voice-picking flow)
   as planned.
+
+## Phase 5 — Operator PWA, core voice-picking flow (2026-09-18)
+
+**Built**
+
+- Two small Phase-4-router additions the offline PWA needs and didn't yet
+  have: `GET /orders/pending` (orders an operator can pick up) and `GET
+  /orders/{id}/lines` (every line's full detail, including expected
+  barcodes — what the offline client caches once, while online, so the
+  rest of picking needs zero round-trips) plus `GET /devices` (device
+  picker at shift start). CORS middleware, also new — the PWA (port 5173)
+  and API (port 8000) are different origins in dev.
+- `apps/web/src/shared/`: `numbersEs.ts` and `phrases.ts`, hand-ported
+  from the Python modules (needed for the `speechSynthesis` fallback to
+  render text locally); `apiClient.ts` + `apiTypes.ts`, a typed fetch
+  wrapper for every endpoint the PWA calls while online.
+- `apps/web/src/operator/`:
+  - `db.ts` — Dexie (IndexedDB): cached order lines, an event outbox
+    (client-generated idempotency keys), and current app/session state.
+  - `outbox.ts` — queues every local pick-machine transition and flushes
+    it to `/events/batch` when online; single-flight guarded (see
+    deviation below).
+  - `clipPlayer.ts` — plays clips from Cache Storage (prefetched from the
+    voice manifest at shift start), falling back to `speechSynthesis`;
+    `unlock()` runs inside the "Start shift" tap to satisfy the
+    autoplay-after-gesture browser policy (section 4's constraint).
+  - `useScannerInput.ts` — keyboard-wedge detection by keystroke timing,
+    with plain typing as the always-available fallback (see deviation:
+    camera scanning is out of scope for this pass).
+  - `baselineMode.ts` — BASELINE's non-blocking wrapper around the shared
+    `transition()` (see deviation below).
+  - `ShiftStart.tsx`, `PickingScreen.tsx`, `OperatorApp.tsx` — login, mode
+    + order selection, shift start (unlocks audio, requests a Wake Lock,
+    caches lines + voice manifest), and the picking flow itself, entirely
+    driven by the shared TypeScript `pickMachine`.
+- `public/sw.js` — a small hand-written service worker precaching the app
+  shell (not a bundled/Workbox setup — see deviation); `public/manifest.webmanifest`
+  for installability.
+- `apps/api/scripts/create_test_order.py` + `apps/web/e2e/global-setup.ts`
+  + `apps/web/e2e/offline-sync.spec.ts` (Playwright, real Chromium): logs
+  in, starts a BASELINE shift, goes offline
+  (`context.setOffline(true)`), completes one line and scans most of a
+  second fully offline, confirms the outbox has queued events, reconnects,
+  confirms the outbox drains to zero with no user action, finishes the
+  order, and verifies via a direct API call that both lines report `DONE`
+  server-side — the phase's required acceptance test.
+
+**Deviations from the plan**
+
+- **Camera/BarcodeDetector scanning is out of scope for this pass** — the
+  human confirmed this scoping call directly (see the conversation).
+  Keyboard-wedge (real hardware scanner) plus plain typing (the
+  "lost/broken scanner" fallback) are both implemented and tested;
+  BarcodeDetector/ZXing camera input isn't, since it can't be verified in
+  this environment (no camera, headless CI) and would be unverified code.
+  Flag before a pilot if a camera fallback turns out to matter in
+  practice.
+- **Supervisor override requires connectivity** — clearing a
+  NEEDS_OVERRIDE line calls `/events` with a supervisor's own token
+  (obtained via a fresh, separate login), not through the offline outbox.
+  This isn't a corner cut so much as what override *means*: verifying a
+  supervisor's identity inherently requires checking the server, so an
+  override occurring while fully offline isn't something the current
+  design (or the plan) specifies a resolution for. The e2e test avoids
+  triggering NEEDS_OVERRIDE, staying on the golden path plus one
+  in-progress line, which is what the acceptance criterion asks for.
+- **A real concurrency bug surfaced and got fixed on both sides**: queuing
+  many events in quick succession (a full pick line: PRESENT + 2 SCANs +
+  QTY) fired overlapping `syncOutbox()` calls, which raced the server's
+  idempotency check against its own insert and surfaced as a raw
+  `UniqueViolation` on `client_event_id` instead of a clean no-op. Fixed
+  with a single-flight guard in `outbox.ts` (concurrent callers await the
+  same in-flight sync) and, for defense in depth against genuinely
+  concurrent clients (two tabs, two devices), a catch in
+  `macenplast.api.events.apply_event` that treats a unique-constraint
+  violation on commit as "the other request already applied this" and
+  returns its cached result instead of raising.
+- **BASELINE mode's "don't block on a mismatch" rule lives in
+  `operator/baselineMode.ts`, not in the shared `pickMachine`** —
+  intentional, not a shortcut: VOICE mode's blocking behavior is the
+  audited Poka-Yoke contract the shared cross-language test vectors pin
+  down, and BASELINE's override is a presentation-layer policy on top of
+  the same machine. `baselineMode.ts` re-runs `transition()` as if the
+  scan/qty had matched whenever the real result would have been
+  BLOCKED/NEEDS_OVERRIDE, tagging the outcome with a `MISMATCH_UNBLOCKED`
+  alert. Has its own Vitest suite (`baselineMode.test.ts`), separate from
+  `pickMachine.test.ts`'s shared vectors.
+- **The `INSTRUCTION` effect's args are assembled by the caller, not
+  taken from the pick-machine effect itself** — `PickContext` has no
+  aisle/bay/level/reference (only barcodes and quantity), so
+  `Speak('INSTRUCTION')` carries no args from the pure machine by design.
+  `PickingScreen.tsx` fills them in from the cached line, exactly the
+  same way `apps/api/src/macenplast/api/orders.py`'s `next-line` endpoint
+  already did server-side. Found via the e2e test failing with "Missing
+  arg 'aisle'" — a good example of why an actual browser-driven e2e test
+  earns its keep over unit tests alone.
+- **Service worker is a hand-written plain-JS file in `public/`**, not a
+  Vite-bundled TypeScript module (which would need a second Rollup build
+  entry) or `vite-plugin-pwa` (a heavier dependency+config surface than
+  this phase needs). It precaches the app shell only; voice clips are
+  cached directly by the page via the Cache Storage API
+  (`operator/clipPlayer.ts`), which doesn't need the service worker's
+  involvement at all.
+- **Reports/KPI comparisons stay out of scope** (Phase 6, per the chosen
+  MVP boundary) — the mode indicator and BASELINE's non-blocking mismatch
+  logging exist so Phase 6 has something to report on later, not to
+  report on themselves yet.
+- Playwright's `webServer` needed `--host 127.0.0.1` for the Vite dev
+  server explicitly: this machine's Vite 8 binds `localhost` to IPv6
+  loopback (`::1`) only, so a health check against `127.0.0.1:5173`
+  (IPv4) failed until the host was pinned explicitly — worth knowing if
+  `make e2e`/CI ever mysteriously times out waiting for the dev server.
+
+**Open questions for later phases**
+
+- Device selection at shift start always picks the first active device —
+  fine for the single seeded demo device, but a real deployment with
+  multiple handhelds needs an actual picker (scan the device's own
+  barcode, most likely). Flag before a multi-device pilot.
+- The manual scanner-input fallback and the two exception buttons
+  (empty location / damaged) are present but not e2e-tested — the e2e
+  suite only covers the golden path plus one in-progress line, per the
+  acceptance criterion's wording. Worth a follow-up test if exception
+  handling becomes pilot-critical.
+- This is the last phase in the chosen MVP scope (Phases 0-5). Phases 6-9
+  (supervisor dashboard/KPI reporting, pilot protocol, feature-flagged
+  voice input, production hardening) remain per `PLAN.md`, to be picked up
+  as separate sessions per the plan's own phase-by-phase workflow.

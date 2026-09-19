@@ -14,7 +14,13 @@ from sqlalchemy.orm import Session
 
 from macenplast.adapters.mock_wms import MockWmsAdapter
 from macenplast.api.deps import get_current_operator
-from macenplast.api.schemas.orders import AssignOrderRequest, NextLineResponse, OrderResponse
+from macenplast.api.schemas.orders import (
+    AssignOrderRequest,
+    NextLineResponse,
+    OrderLineDetail,
+    OrderResponse,
+    PendingOrderSummary,
+)
 from macenplast.config import get_settings
 from macenplast.db.models import Operator, OrderStatus, PickLine, PickOrder, PickSession
 from macenplast.db.session import get_db
@@ -25,6 +31,73 @@ from macenplast.ports.wms_port import InsufficientStockError
 from macenplast.voice.phrases import render_phrase
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+@router.get("/pending")
+def list_pending_orders(
+    operator: Operator = Depends(get_current_operator),
+    db: Session = Depends(get_db),
+) -> list[PendingOrderSummary]:
+    """Orders with no session yet — what an operator can pick up next."""
+    orders = db.query(PickOrder).filter(PickOrder.session_id.is_(None)).all()
+    return [
+        PendingOrderSummary(
+            id=order.id,
+            order_code=order.order_code,
+            line_count=db.query(PickLine).filter(PickLine.order_id == order.id).count(),
+        )
+        for order in orders
+    ]
+
+
+@router.get("/{order_id}/lines")
+def get_order_lines(
+    order_id: uuid.UUID,
+    operator: Operator = Depends(get_current_operator),
+    db: Session = Depends(get_db),
+) -> list[OrderLineDetail]:
+    """Full detail for every line in the order, including expected
+    barcodes — what the offline PWA caches once (while online) so it can
+    run the whole pick machine locally afterward with no more round-trips.
+    """
+    order = db.get(PickOrder, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    lines = (
+        db.query(PickLine)
+        .filter(PickLine.order_id == order_id)
+        .order_by(PickLine.sequence.asc())
+        .all()
+    )
+
+    details: list[OrderLineDetail] = []
+    for line in lines:
+        sku = line.sku
+        location = line.location
+        primary_barcode = sku.barcodes[0].barcode if sku.barcodes else None
+        if primary_barcode is None:
+            raise HTTPException(status_code=500, detail=f"SKU {sku.code} has no barcode")
+        details.append(
+            OrderLineDetail(
+                line_id=line.id,
+                sequence=line.sequence,
+                state=line.state,
+                attempts=line.attempts,
+                blocked_on=line.blocked_on,
+                last_qty=line.last_qty,
+                location_check_enabled=get_settings().location_check_enabled,
+                aisle=location.aisle,
+                bay=location.bay,
+                level=location.level,
+                location_barcode=location.barcode,
+                sku_code=sku.code,
+                sku_barcode=primary_barcode,
+                reference=sku.voice_alias or sku.description,
+                expected_qty=line.expected_qty,
+            )
+        )
+    return details
 
 
 @router.post("/{order_id}/assign")

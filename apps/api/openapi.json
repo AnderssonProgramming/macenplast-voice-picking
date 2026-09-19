@@ -88,6 +88,30 @@
         "title": "ClipDescriptor",
         "type": "object"
       },
+      "DeviceResponse": {
+        "properties": {
+          "device_code": {
+            "title": "Device Code",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "device_code",
+          "label"
+        ],
+        "title": "DeviceResponse",
+        "type": "object"
+      },
       "EventResult": {
         "properties": {
           "attempts": {
@@ -396,6 +420,103 @@
         "title": "OperatorRole",
         "type": "string"
       },
+      "OrderLineDetail": {
+        "description": "Everything the offline client needs to run this line's pick machine\nlocally, with no further round-trips \u2014 see `GET /orders/{id}/lines`.",
+        "properties": {
+          "aisle": {
+            "title": "Aisle",
+            "type": "string"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "bay": {
+            "title": "Bay",
+            "type": "string"
+          },
+          "blocked_on": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BlockedOn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_qty": {
+            "title": "Expected Qty",
+            "type": "integer"
+          },
+          "last_qty": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Qty"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "line_id": {
+            "format": "uuid",
+            "title": "Line Id",
+            "type": "string"
+          },
+          "location_barcode": {
+            "title": "Location Barcode",
+            "type": "string"
+          },
+          "location_check_enabled": {
+            "title": "Location Check Enabled",
+            "type": "boolean"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "sku_barcode": {
+            "title": "Sku Barcode",
+            "type": "string"
+          },
+          "sku_code": {
+            "title": "Sku Code",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PickState"
+          }
+        },
+        "required": [
+          "line_id",
+          "sequence",
+          "state",
+          "attempts",
+          "blocked_on",
+          "last_qty",
+          "location_check_enabled",
+          "aisle",
+          "bay",
+          "level",
+          "location_barcode",
+          "sku_code",
+          "sku_barcode",
+          "reference",
+          "expected_qty"
+        ],
+        "title": "OrderLineDetail",
+        "type": "object"
+      },
       "OrderResponse": {
         "properties": {
           "id": {
@@ -442,6 +563,31 @@
         ],
         "title": "OrderStatus",
         "type": "string"
+      },
+      "PendingOrderSummary": {
+        "description": "One order an operator could pick up \u2014 enough to choose from a list.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "line_count": {
+            "title": "Line Count",
+            "type": "integer"
+          },
+          "order_code": {
+            "title": "Order Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "order_code",
+          "line_count"
+        ],
+        "title": "PendingOrderSummary",
+        "type": "object"
       },
       "PickState": {
         "description": "States a single pick line can be in.",
@@ -831,6 +977,36 @@
         ]
       }
     },
+    "/devices": {
+      "get": {
+        "operationId": "list_devices_devices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeviceResponse"
+                  },
+                  "title": "Response List Devices Devices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Devices",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
     "/events": {
       "post": {
         "operationId": "submit_event_events_post",
@@ -1055,6 +1231,37 @@
         ]
       }
     },
+    "/orders/pending": {
+      "get": {
+        "description": "Orders with no session yet \u2014 what an operator can pick up next.",
+        "operationId": "list_pending_orders_orders_pending_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PendingOrderSummary"
+                  },
+                  "title": "Response List Pending Orders Orders Pending Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Pending Orders",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
     "/orders/{order_id}/assign": {
       "post": {
         "operationId": "assign_order_orders__order_id__assign_post",
@@ -1108,6 +1315,59 @@
           }
         ],
         "summary": "Assign Order",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/orders/{order_id}/lines": {
+      "get": {
+        "description": "Full detail for every line in the order, including expected\nbarcodes \u2014 what the offline PWA caches once (while online) so it can\nrun the whole pick machine locally afterward with no more round-trips.",
+        "operationId": "get_order_lines_orders__order_id__lines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OrderLineDetail"
+                  },
+                  "title": "Response Get Order Lines Orders  Order Id  Lines Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Order Lines",
         "tags": [
           "orders"
         ]

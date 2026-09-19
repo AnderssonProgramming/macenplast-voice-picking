@@ -1,10 +1,8 @@
-function App() {
-  return (
-    <main>
-      <h1>Macenplast Voice Picking</h1>
-      <p>Operator PWA — bootstrap scaffold, Phase 0.</p>
-    </main>
-  )
+import type { JSX } from 'react'
+import { OperatorApp } from './operator/OperatorApp'
+
+function App(): JSX.Element {
+  return <OperatorApp />
 }
 
 export default App

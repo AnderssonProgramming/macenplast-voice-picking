@@ -10,18 +10,12 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-import pytest
-from sqlalchemy.exc import OperationalError
-
-from macenplast.db import seed
-from macenplast.db.base import Base
 from macenplast.db.models import Location, PickLine, PickOrder, Sku
-from macenplast.db.session import SessionLocal, engine
+from macenplast.db.session import SessionLocal
 from macenplast.domain.pick_machine import PickState
 from macenplast.voice.phrases import render_phrase
 
@@ -37,19 +31,6 @@ def _load_script_module() -> ModuleType:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
-
-
-@pytest.fixture
-def seeded_db() -> Iterator[None]:
-    try:
-        with engine.connect():
-            pass
-    except OperationalError:
-        pytest.skip("Postgres not reachable; start it with `docker compose up -d postgres`")
-
-    Base.metadata.create_all(bind=engine)
-    seed.main()
-    yield
 
 
 @patch("macenplast.voice.clip_cache.synthesize")

@@ -2,39 +2,56 @@
 order, walk a pick line through a BLOCKED -> NEEDS_OVERRIDE -> override ->
 DONE path, and check stock and audit events land correctly.
 
-Requires a reachable Postgres; skips otherwise (see test_seed.py). TTS is
-irrelevant here (voice endpoints aren't exercised) so it isn't mocked.
+Requires a reachable Postgres; skips otherwise (see conftest.py's
+`seeded_db`). TTS is irrelevant here (voice endpoints aren't exercised) so
+it isn't mocked.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterator
 
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
-from macenplast.db import seed
-from macenplast.db.base import Base
-from macenplast.db.models import Device, PickEvent, PickLine, PickOrder, StockLevel
-from macenplast.db.session import SessionLocal, engine
+from macenplast.db.models import Device, PickEvent, PickLine, PickOrder, Sku, StockLevel
+from macenplast.db.session import SessionLocal
+from macenplast.domain.pick_machine import PickState
 from macenplast.main import app
 
 client = TestClient(app)
 
 
-@pytest.fixture
-def seeded_db() -> Iterator[None]:
-    try:
-        with engine.connect():
-            pass
-    except OperationalError:
-        pytest.skip("Postgres not reachable; start it with `docker compose up -d postgres`")
+def make_fresh_order(db: Session, num_lines: int = 1) -> PickOrder:
+    """Create a brand-new PENDING order with `num_lines` lines, using
+    already-seeded SKUs/stock. Deliberately doesn't reuse a shared seeded
+    order: this suite runs repeatedly against one persistent dev
+    database, and a test that instead queried for "any seeded order with
+    no session yet" would find fewer and fewer of them over time as prior
+    runs assign them, eventually failing outright.
+    """
+    skus = db.query(Sku).limit(num_lines).all()
+    assert len(skus) == num_lines, "Not enough seeded SKUs — run `make seed` first"
 
-    Base.metadata.create_all(bind=engine)
-    seed.main()
-    yield
+    order = PickOrder(order_code=f"TEST-ORD-{uuid.uuid4().hex[:8]}")
+    db.add(order)
+    db.flush()
+    for i, sku in enumerate(skus):
+        stock = db.query(StockLevel).filter_by(sku_id=sku.id).first()
+        assert stock is not None, f"No stock for seeded sku {sku.code}"
+        db.add(
+            PickLine(
+                order_id=order.id,
+                sku_id=sku.id,
+                location_id=stock.location_id,
+                sequence=i,
+                expected_qty=5 + i,
+                state=PickState.PENDING,
+            )
+        )
+    db.commit()
+    db.refresh(order)
+    return order
 
 
 def _login(badge_code: str, pin: str) -> str:
@@ -60,10 +77,17 @@ def test_full_order_flow_blocked_override_done(seeded_db: None) -> None:
     with SessionLocal() as db:
         device = db.query(Device).first()
         assert device is not None
-        order = db.query(PickOrder).filter(PickOrder.session_id.is_(None)).first()
-        assert order is not None
+        order = make_fresh_order(db)
         order_id = order.id
         device_id = device.id
+        line = db.query(PickLine).filter_by(order_id=order.id).one()
+        initial_stock = (
+            db.query(StockLevel)
+            .filter_by(sku_id=line.sku_id, location_id=line.location_id)
+            .one()
+        )
+        initial_quantity = initial_stock.quantity
+        initial_reserved_qty = initial_stock.reserved_qty
 
     start_response = client.post(
         "/sessions/start",
@@ -168,10 +192,13 @@ def test_full_order_flow_blocked_override_done(seeded_db: None) -> None:
     assert any(effect["type"] == "QUEUE_SYNC" for effect in done_result["effects"])
 
     # Stock was committed exactly once: on-hand decremented, reservation cleared.
+    # (reserved_qty is a shared per-(sku, location) counter, not scoped to
+    # this line, so it's asserted as a delta too — other orders sharing
+    # this SKU may hold their own outstanding reservations.)
     with SessionLocal() as db:
         stock = db.query(StockLevel).filter_by(sku_id=sku_id, location_id=location_id).one()
-        assert stock.quantity == 100 - expected_qty
-        assert stock.reserved_qty == 0
+        assert stock.quantity == initial_quantity - expected_qty
+        assert stock.reserved_qty == initial_reserved_qty
 
         events = db.query(PickEvent).filter_by(session_id=uuid.UUID(session_id)).all()
         assert len(events) == 5  # 3 wrong scans + 1 override + 1 qty
@@ -193,6 +220,6 @@ def test_full_order_flow_blocked_override_done(seeded_db: None) -> None:
 
     with SessionLocal() as db:
         stock = db.query(StockLevel).filter_by(sku_id=sku_id, location_id=location_id).one()
-        assert stock.quantity == 100 - expected_qty  # unchanged
+        assert stock.quantity == initial_quantity - expected_qty  # unchanged
         events = db.query(PickEvent).filter_by(session_id=uuid.UUID(session_id)).all()
         assert len(events) == 5  # unchanged
