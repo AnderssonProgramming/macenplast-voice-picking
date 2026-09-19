@@ -1,0 +1,17 @@
+# Spanish (Colombia) phrase catalog for the pick machine's Speak/PlayAlert
+# effects (see macenplast.domain.pick_machine). Keys match the `phrase` /
+# `alert` values those effects carry exactly, so the voice layer never
+# hard-codes Spanish text elsewhere (CLAUDE.md's language rule).
+#
+# Placeholders are filled by macenplast.voice.phrases.render_phrase(); any
+# integer argument is converted to its spoken Spanish word (see
+# macenplast.domain.numbers_es) before formatting, per the plan's
+# nominal-number-form rule — never a noun-phrase form.
+
+INSTRUCTION: "Pasillo {aisle}. Estante {bay}. Nivel {level}. Referencia, {reference}. Cantidad, {quantity}."
+LOCATION_CORRECT: "Ubicación correcta."
+QTY_PROMPT: "Cantidad, {quantity}."
+CORRECT: "Correcto."
+CALL_SUPERVISOR: "Llame al supervisor."
+ASK_CONFIRM_SHORT: "Cantidad registrada, {quantity}. Confirme el faltante."
+MISMATCH: "Incorrecto."

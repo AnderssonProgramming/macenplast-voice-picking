@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://macenplast:macenplast@localhost:5442/macenplast"
 
     elevenlabs_api_key: str = ""
+    # ElevenLabs' public "Rachel" voice — a placeholder until Macenplast
+    # picks/clones a real voice. Override via ELEVENLABS_VOICE_ID.
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     voice_clip_dir: str = "./voice_clips"
 
     routing_strategy: str = "serpentine"

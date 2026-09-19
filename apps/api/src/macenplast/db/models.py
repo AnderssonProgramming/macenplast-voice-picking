@@ -210,6 +210,9 @@ class PickLine(TimestampedBase):
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
+    sku: Mapped[Sku] = relationship()
+    location: Mapped[Location] = relationship()
+
 
 class PickEvent(TimestampedBase):
     """Append-only audit log entry for one pick line.

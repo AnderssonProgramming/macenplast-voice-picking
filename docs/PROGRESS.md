@@ -169,3 +169,80 @@ questions for the next phase.
 
 - None yet — proceeding to Phase 3 (voice service and clip pipeline) as
   planned.
+
+## Phase 3 — Voice service and clip pipeline (2026-09-18)
+
+**Built**
+
+- `apps/api/src/macenplast/domain/numbers_es.py`: pure Spanish
+  number-to-speech, 0-999, nominal form only (per section 6's
+  phrase-writing rule). Hypothesis property tests plus a full-range
+  uniqueness check and hand-checked known values (`ciento uno` vs `cien`,
+  accented `dieciséis`/`veintidós`, etc.).
+- `apps/api/src/macenplast/voice/phrases.es.yaml` +
+  `apps/api/src/macenplast/voice/phrases.py`: the Spanish phrase catalog,
+  keyed exactly by the phrase strings the pick machine's `Speak`/
+  `PlayAlert` effects already carry (`INSTRUCTION`, `LOCATION_CORRECT`,
+  `QTY_PROMPT`, `CORRECT`, `CALL_SUPERVISOR`, `ASK_CONFIRM_SHORT`,
+  `MISMATCH`). `render_phrase()` converts any integer argument to its
+  spoken word via `numbers_es` automatically, so no caller ever formats a
+  number itself.
+- `docs/adr/0003-elevenlabs-tts.md`: records what was verified against
+  ElevenLabs' current docs (package, client, method signature, return
+  type, endpoint, output formats) before writing the wrapper, per
+  `CLAUDE.md`'s rule.
+- `apps/api/src/macenplast/voice/tts.py`: `synthesize()` wraps
+  `elevenlabs.client.ElevenLabs().text_to_speech.convert(...)`, always
+  passing `model_id`/`api_key` explicitly (never relying on SDK/env
+  defaults). Mocked in `tests/test_tts.py`; `tests/test_tts_live.py` is
+  the real-API smoke test, marked `@pytest.mark.live` and skipped by
+  default.
+- `apps/api/src/macenplast/voice/clip_cache.py`: `get_or_synthesize()` —
+  content-hash-keyed cache (`voice_clips` DB row + file under
+  `VOICE_CLIP_DIR`). Hash covers `(text, voice_id, model_id,
+  output_format)`.
+- `tools/voice-clips/build_static_clips.py`: builds numbers 0-999, the 4
+  fixed phrases, every SKU's `voice_alias`, and INSTRUCTION/QTY_PROMPT for
+  every currently-PENDING pick line — everything a demo run through the
+  seeded warehouse needs. Deliberately does not pre-build
+  `ASK_CONFIRM_SHORT` (the shortage quantity isn't known ahead of time —
+  documented in the script's own docstring as an intentional, not missed,
+  dynamic case).
+- `apps/api/src/macenplast/api/voice.py` (+ `api/schemas/voice.py`): three
+  endpoints — `GET /voice/skus/{sku_id}/clip` (the dynamic per-SKU clip),
+  `GET /voice/orders/{order_id}/manifest` (dedup'd list of every clip a
+  device needs for an order, synthesizing anything missing), and `GET
+  /voice/clips/{content_hash}` (serves the audio file). Wired into
+  `main.py`.
+
+**Deviations from the plan**
+
+- The plan's "static clip library (numbers, commands, alerts)" vs.
+  "dynamic per-SKU clips" split is about *when* something is generated
+  (build time vs. first use), not a hard rule about content. Rather than
+  composing spoken instructions from concatenated word-level clips at
+  playback time (which would let "Pasillo", "Estante", numbers, etc. be
+  pure static fragments reused across every line), this phase synthesizes
+  each full rendered sentence (`INSTRUCTION`, `QTY_PROMPT`) as one clip,
+  cached by its complete text's content hash. Simpler to build and test
+  now; clip-sequence playback is a Phase 5 (`ClipPlayer`) concern and can
+  be revisited later without changing this phase's cache/manifest
+  contracts either way.
+- `build_static_clips.py` pre-warms INSTRUCTION/QTY_PROMPT for
+  *currently-PENDING* pick lines specifically (not a content-agnostic
+  "static" set), so Phase 3's acceptance criterion ("produces every clip
+  needed for a full seeded order with zero dynamic-clip fallbacks at
+  runtime") is testable against real seeded data. `test_build_static_clips.py`
+  checks this the robust way — running the build twice makes zero
+  synthesis calls the second time — rather than asserting a call count
+  tied to a "fresh" cache, since tests share a persistent dev Postgres
+  across runs.
+- Voice endpoints landed in Phase 3, not Phase 4, because Phase 3's own
+  deliverables explicitly call for a dynamic-clip endpoint and a voice
+  manifest response. They use `PickOrder`/`PickLine` directly rather than
+  waiting for Phase 4's orders router.
+
+**Open questions for Phase 4**
+
+- None yet — proceeding to Phase 4 (backend API: auth, sessions, orders,
+  events, incidents, override, SSE) as planned.
