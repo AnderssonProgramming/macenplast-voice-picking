@@ -223,3 +223,89 @@ def test_full_order_flow_blocked_override_done(seeded_db: None) -> None:
         assert stock.quantity == initial_quantity - expected_qty  # unchanged
         events = db.query(PickEvent).filter_by(session_id=uuid.UUID(session_id)).all()
         assert len(events) == 5  # unchanged
+
+
+def test_baseline_mode_mismatches_never_block_the_server_either(seeded_db: None) -> None:
+    """Regression test for a live-found bug: BASELINE's "never block" rule
+    was only implemented in the TypeScript client (baselineMode.ts). The
+    offline PWA still queues the *actual* mismatched event (for the audit
+    trail), and the server replayed it through the strict, blocking
+    `transition()` with no idea the session was BASELINE — so the
+    server's own copy of the line drifted into BLOCKED while the client
+    had already moved on, and the next queued event (a different type
+    than what that blocked state expects) 500'd with
+    InvalidTransitionError. This drives three wrong events — location,
+    SKU, and an over-quantity — through the real `/events/batch`
+    endpoint the PWA actually calls, and expects the line to complete
+    anyway, with no error outcome anywhere in the batch.
+    """
+    operator_token = _login("0001", "1234")
+
+    with SessionLocal() as db:
+        device = db.query(Device).first()
+        assert device is not None
+        order = make_fresh_order(db)
+        order_id = order.id
+        device_id = device.id
+        line = db.query(PickLine).filter_by(order_id=order.id).one()
+        line_id = line.id
+        expected_qty = line.expected_qty
+
+    start_response = client.post(
+        "/sessions/start",
+        json={"device_id": str(device_id), "mode": "BASELINE"},
+        headers=_auth(operator_token),
+    )
+    assert start_response.status_code == 200, start_response.text
+    session_id = start_response.json()["id"]
+
+    assign_response = client.post(
+        f"/orders/{order_id}/assign",
+        json={"session_id": session_id},
+        headers=_auth(operator_token),
+    )
+    assert assign_response.status_code == 200, assign_response.text
+
+    batch_response = client.post(
+        "/events/batch",
+        json={
+            "events": [
+                {
+                    "client_event_id": str(uuid.uuid4()),
+                    "pick_line_id": str(line_id),
+                    "session_id": session_id,
+                    "event": {"type": "PRESENT"},
+                },
+                {
+                    "client_event_id": str(uuid.uuid4()),
+                    "pick_line_id": str(line_id),
+                    "session_id": session_id,
+                    "event": {"type": "SCAN", "barcode": "WRONG-LOCATION"},
+                },
+                {
+                    "client_event_id": str(uuid.uuid4()),
+                    "pick_line_id": str(line_id),
+                    "session_id": session_id,
+                    "event": {"type": "SCAN", "barcode": "WRONG-SKU"},
+                },
+                {
+                    "client_event_id": str(uuid.uuid4()),
+                    "pick_line_id": str(line_id),
+                    "session_id": session_id,
+                    "event": {"type": "QTY", "quantity": expected_qty + 999},
+                },
+            ]
+        },
+        headers=_auth(operator_token),
+    )
+    assert batch_response.status_code == 200, batch_response.text
+    outcomes = batch_response.json()["outcomes"]
+    assert all(o["success"] for o in outcomes), outcomes
+    assert outcomes[-1]["result"]["state"] == "DONE"
+
+    with SessionLocal() as db:
+        pick_line = db.get(PickLine, line_id)
+        assert pick_line is not None
+        assert pick_line.state == PickState.DONE
+        assert pick_line.attempts == 0
+        assert pick_line.blocked_on is None

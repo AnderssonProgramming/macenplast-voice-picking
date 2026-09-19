@@ -28,10 +28,20 @@ from macenplast.api.schemas.events import (
 )
 from macenplast.api.sse import broadcaster
 from macenplast.config import get_settings
-from macenplast.db.models import Incident, Operator, OperatorRole, PickEvent, PickLine
+from macenplast.db.models import (
+    Incident,
+    Operator,
+    OperatorRole,
+    PickEvent,
+    PickLine,
+    PickSession,
+    SessionMode,
+)
 from macenplast.db.session import get_db
+from macenplast.domain.baseline_mode import apply_baseline_event
 from macenplast.domain.pick_machine import (
     AdvanceLine,
+    InvalidTransitionError,
     LogIncident,
     LogOverride,
     Override,
@@ -65,15 +75,17 @@ def _line_to_context(
 
 def apply_event(db: Session, operator: Operator, request: SubmitEventRequest) -> EventResult:
     """Apply one event, idempotent on `request.client_event_id`."""
-    existing = (
-        db.query(PickEvent).filter_by(client_event_id=request.client_event_id).one_or_none()
-    )
+    existing = db.query(PickEvent).filter_by(client_event_id=request.client_event_id).one_or_none()
     if existing is not None:
         return EventResult(**existing.payload["result"])
 
     line = db.get(PickLine, request.pick_line_id)
     if line is None:
         raise HTTPException(status_code=404, detail="Pick line not found")
+
+    session = db.get(PickSession, request.session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
 
     event = event_from_json(request.event)
 
@@ -93,7 +105,17 @@ def apply_event(db: Session, operator: Operator, request: SubmitEventRequest) ->
         expected_location_barcode=location.barcode,
         expected_sku_barcode=primary_barcode,
     )
-    result = transition(PickState(line.state), context, event)
+    # BASELINE sessions replay every event through the same "never block"
+    # override the offline PWA applies client-side (baseline_mode.py) —
+    # otherwise the server's own copy of `line.state` independently drifts
+    # into BLOCKED/NEEDS_OVERRIDE on a mismatch the client already forced
+    # past, and a later queued event (a different type than what that
+    # blocked state expects) raises InvalidTransitionError.
+    result = (
+        apply_baseline_event(PickState(line.state), context, event)
+        if session.mode == SessionMode.BASELINE
+        else transition(PickState(line.state), context, event)
+    )
 
     line.state = result.state
     line.attempts = result.context.attempts
@@ -185,6 +207,9 @@ def submit_event(
         return apply_event(db, operator, request)
     except OverrideNotAuthorizedError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except InvalidTransitionError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/batch")
@@ -202,7 +227,7 @@ def submit_event_batch(
                     client_event_id=event_request.client_event_id, success=True, result=result
                 )
             )
-        except (OverrideNotAuthorizedError, HTTPException) as exc:
+        except (OverrideNotAuthorizedError, HTTPException, InvalidTransitionError) as exc:
             db.rollback()
             detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
             outcomes.append(

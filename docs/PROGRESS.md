@@ -417,6 +417,31 @@ questions for the next phase.
   BLOCKED/NEEDS_OVERRIDE, tagging the outcome with a `MISMATCH_UNBLOCKED`
   alert. Has its own Vitest suite (`baselineMode.test.ts`), separate from
   `pickMachine.test.ts`'s shared vectors.
+- **Correction to the above, found live-testing the Vercel deployment**:
+  the offline PWA queues the *actual* mismatched event for the audit
+  trail (not a synthesized "corrected" one), and that event gets replayed
+  server-side by `macenplast.api.events.apply_event` — which had no idea
+  the session was BASELINE and always ran the strict, blocking
+  `transition()`. A wrong location scan pushed the server's copy of the
+  line into BLOCKED while the client had already moved on; the next
+  queued event (a QTY submission, a different event type than what
+  BLOCKED(LOCATION) accepts) then 500'd with `InvalidTransitionError` —
+  and since `submit_event_batch` didn't catch that exception, the crash
+  killed the whole batch response, so the offline outbox retried the same
+  poisoned event forever ("Pendientes por sincronizar" stuck non-zero).
+  Fixed by porting `baselineMode.ts` to Python
+  (`macenplast.domain.baseline_mode.apply_baseline_event`), used whenever
+  `apply_event` finds the session's `mode` is BASELINE, plus catching
+  `InvalidTransitionError` in both event endpoints so one bad event can't
+  crash a whole batch regardless of mode. `PLAN.md`'s original framing —
+  "presentation-layer policy on top of the same machine" — was right
+  about the pick machine itself, just wrong about which layers need it:
+  both the client's local state AND the server's authoritative replay are
+  presentation over the same machine. Regression-tested through the real
+  `/events/batch` endpoint (`test_baseline_mode_mismatches_never_block_the_server_either`),
+  not just the ported function in isolation — a wiring mistake in
+  `events.py` wouldn't have shown up in a unit test of
+  `baseline_mode.py` alone.
 - **The `INSTRUCTION` effect's args are assembled by the caller, not
   taken from the pick-machine effect itself** — `PickContext` has no
   aisle/bay/level/reference (only barcodes and quantity), so
